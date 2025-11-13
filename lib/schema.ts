@@ -1,4 +1,11 @@
-import { pgTable, text, timestamp, boolean } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  text,
+  timestamp,
+  boolean,
+  uuid,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -61,3 +68,33 @@ export const verification = pgTable("verification", {
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
 });
+
+export const storeConfig = pgTable(
+  "store_config",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    storeId: text("store_id").notNull(),
+    storeName: text("store_name").notNull(),
+    storeDomain: text("store_domain"),
+    scriptUrl: text("script_url").notNull(),
+    scriptTag: text("script_tag").notNull(),
+    installed: boolean("installed").default(false).notNull(),
+    installedAt: timestamp("installed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => ({
+    userStoreIdx: uniqueIndex("store_config_user_store_idx").on(
+      table.userId,
+      table.storeId,
+    ),
+  }),
+);

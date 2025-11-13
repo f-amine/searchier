@@ -7,7 +7,7 @@ import { db } from "./drizzle";
 import type { Account } from "better-auth";
 
 const cookiePrefix = "searchier";
-const defaultScopes = "orders,funnels,products,channels";
+const defaultScopes = "orders,funnels,products";
 
 const defaultBaseURL = process.env.BETTER_AUTH_URL;
 
