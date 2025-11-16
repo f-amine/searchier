@@ -1,0 +1,25 @@
+[metadata]
+name = "searchier"
+schema-version = "1.0"
+
+[variables]
+NODE_ENV = "production"
+
+[phases.setup]
+cmds = [
+  "corepack enable",
+  "corepack prepare pnpm@latest --activate"
+]
+
+[phases.install]
+cmds = [
+  "pnpm install --frozen-lockfile"
+]
+
+[phases.build]
+cmds = [
+  "pnpm build"
+]
+
+[start]
+cmd = "pnpm start"

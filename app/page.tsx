@@ -32,9 +32,7 @@ export default function Home() {
     <div className="flex min-h-screen items-center justify-center bg-background">
       <div className="flex flex-col items-center gap-4 text-center">
         <Spinner className="size-8" />
-        <p className="text-sm text-muted-foreground">
-          Redirecting you to Lightfunnels…
-        </p>
+        <p className="text-sm text-muted-foreground">Loading</p>
       </div>
     </div>
   );
