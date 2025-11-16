@@ -28,6 +28,9 @@ export const auth = betterAuth({
   appName: "Lightfunnels",
   baseURL: defaultBaseURL,
   basePath: "/api/auth",
+  trustedOrigins: [
+    process.env.LF_FRONT_URL ?? "https://app.lightfunnels.com",
+  ],
   secret: ensureEnv("APP_SECRET"),
   cookies: {
     sessionToken: {
