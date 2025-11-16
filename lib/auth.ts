@@ -2,7 +2,6 @@ import { betterAuth } from "better-auth";
 import { genericOAuth } from "better-auth/plugins";
 import { nextCookies } from "better-auth/next-js";
 import type { BetterAuthPlugin } from "better-auth";
-import { createAuthMiddleware } from "better-auth/api";
 import { fetchLightfunnelsAccount } from "@/lib/lightfunnels";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "./drizzle";
@@ -21,33 +20,17 @@ const ensureEnv = (key: string) => {
 };
 
 const isProduction = process.env.NODE_ENV === "production";
+const authBasePath = "/api/auth";
 
 const skipOAuthStateCookieCheck = (): BetterAuthPlugin => ({
   id: "skip-oauth-state-cookie-check",
-  hooks: {
-    before: [
-      {
-        matcher() {
-          return true;
-        },
-        handler: createAuthMiddleware(async (ctx) => {
-          if (ctx.path !== "/callback/:id") {
-            return;
-          }
-
-          return {
-            context: {
-              context: {
-                oauthConfig: {
-                  skipStateCookieCheck: true,
-                },
-              },
-            },
-          };
-        }),
+  init: () => ({
+    context: {
+      oauthConfig: {
+        skipStateCookieCheck: true,
       },
-    ],
-  },
+    },
+  }),
 });
 
 export const auth = betterAuth({
@@ -57,36 +40,52 @@ export const auth = betterAuth({
   usePlural: true,
   appName: "Lightfunnels",
   baseURL: defaultBaseURL,
-  basePath: "/api/auth",
-  trustedOrigins: [
-    process.env.LF_FRONT_URL ?? "https://app.lightfunnels.com",
-  ],
+  basePath: authBasePath,
+  trustedOrigins: [process.env.LF_FRONT_URL ?? "https://app.lightfunnels.com"],
   secret: ensureEnv("APP_SECRET"),
+  advanced: {
+    defaultCookieAttributes: {
+      sameSite: "none",
+      secure: true,
+      partitioned: true,
+    },
+    cookies: {
+      oauth_state: {
+        attributes: {
+          sameSite: "none",
+          secure: true,
+        },
+      },
+    },
+  },
   cookies: {
     sessionToken: {
       name: `${cookiePrefix}.session-token`,
       options: {
         path: "/",
-        sameSite: isProduction ? "none" : "lax",
-        secure: isProduction,
+        sameSite: "none",
+        secure: true,
+        partitioned: true,
       },
     },
     sessionData: {
       name: `${cookiePrefix}.session-data`,
       options: {
         path: "/",
-        sameSite: "lax",
-        secure: isProduction,
+        sameSite: "none",
+        secure: true,
         httpOnly: true,
+        partitioned: true,
       },
     },
     dontRememberToken: {
       name: `${cookiePrefix}.dont-remember`,
       options: {
         path: "/",
-        sameSite: "lax",
-        secure: isProduction,
+        sameSite: "none",
+        secure: true,
         httpOnly: true,
+        partitioned: true,
       },
     },
   },
