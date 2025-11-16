@@ -54,22 +54,6 @@ export const auth = betterAuth({
   database: drizzleAdapter(db, {
     provider: "pg",
   }),
-  account: {
-    additionalFields: {
-      lfAccountId: {
-        type: "string",
-        fieldName: "lf_account_id",
-        required: false,
-        input: false,
-      },
-      lfAccessToken: {
-        type: "string",
-        fieldName: "lf_access_token",
-        required: false,
-        input: false,
-      },
-    },
-  },
   usePlural: true,
   appName: "Lightfunnels",
   baseURL: defaultBaseURL,
