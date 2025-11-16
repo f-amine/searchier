@@ -4,7 +4,6 @@ import { nextCookies } from "better-auth/next-js";
 import { fetchLightfunnelsAccount } from "@/lib/lightfunnels";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "./drizzle";
-import type { Account } from "better-auth";
 
 const cookiePrefix = "searchier";
 const defaultScopes = "orders,funnels,products";
@@ -20,35 +19,6 @@ const ensureEnv = (key: string) => {
 };
 
 const isProduction = process.env.NODE_ENV === "production";
-
-type ExtendedAccount = Account & {
-  lfAccountId?: string | null;
-  lfAccessToken?: string | null;
-};
-
-const syncLfFields = (
-  incoming: Partial<ExtendedAccount>,
-): Record<string, string | null> => {
-  const updates: Record<string, string | null> = {};
-
-  if (incoming.accountId && incoming.accountId !== incoming.lfAccountId) {
-    updates.lfAccountId = incoming.accountId;
-  }
-
-  if (incoming.accessToken && incoming.accessToken !== incoming.lfAccessToken) {
-    updates.lfAccessToken = incoming.accessToken;
-  }
-
-  return updates;
-};
-
-const withLfFieldOverrides = <T extends Partial<ExtendedAccount>>(data: T) => {
-  const overrides = syncLfFields(data);
-  if (Object.keys(overrides).length === 0) {
-    return null;
-  }
-  return { ...data, ...overrides };
-};
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -84,28 +54,6 @@ export const auth = betterAuth({
         sameSite: "lax",
         secure: isProduction,
         httpOnly: true,
-      },
-    },
-  },
-  databaseHooks: {
-    account: {
-      create: {
-        before: async (acc) => {
-          const nextData = withLfFieldOverrides(acc as ExtendedAccount);
-          if (nextData) {
-            return { data: nextData };
-          }
-        },
-      },
-      update: {
-        before: async (acc) => {
-          const nextData = withLfFieldOverrides(
-            acc as Partial<ExtendedAccount>,
-          );
-          if (nextData) {
-            return { data: nextData };
-          }
-        },
       },
     },
   },

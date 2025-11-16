@@ -10,7 +10,7 @@ export async function getUserLightfunnelsToken(userId: string) {
     ),
   });
 
-  const token = record?.lfAccessToken ?? record?.accessToken;
+  const token = record?.accessToken;
 
   if (!token) {
     throw new Error("Missing Lightfunnels access token for this user.");
