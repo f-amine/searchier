@@ -1,6 +1,8 @@
 import { betterAuth } from "better-auth";
 import { genericOAuth } from "better-auth/plugins";
 import { nextCookies } from "better-auth/next-js";
+import type { BetterAuthPlugin } from "better-auth";
+import { createAuthMiddleware } from "better-auth/api";
 import { fetchLightfunnelsAccount } from "@/lib/lightfunnels";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "./drizzle";
@@ -19,6 +21,34 @@ const ensureEnv = (key: string) => {
 };
 
 const isProduction = process.env.NODE_ENV === "production";
+
+const skipOAuthStateCookieCheck = (): BetterAuthPlugin => ({
+  id: "skip-oauth-state-cookie-check",
+  hooks: {
+    before: [
+      {
+        matcher() {
+          return true;
+        },
+        handler: createAuthMiddleware(async (ctx) => {
+          if (ctx.path !== "/callback/:id") {
+            return;
+          }
+
+          return {
+            context: {
+              context: {
+                oauthConfig: {
+                  skipStateCookieCheck: true,
+                },
+              },
+            },
+          };
+        }),
+      },
+    ],
+  },
+});
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -61,6 +91,7 @@ export const auth = betterAuth({
     },
   },
   plugins: [
+    skipOAuthStateCookieCheck(),
     nextCookies(),
     genericOAuth({
       config: [
