@@ -9,7 +9,11 @@
 
   const scriptUrl = new URL(SCRIPT.src, window.location.href);
   const API_BASE = new URL("/api/products", scriptUrl.origin).toString();
-  const INPUT_SELECTOR = 'input[data-searchier], input#searchier';
+  const EVENTS_ENDPOINT = new URL(
+    "/api/searchier/events",
+    scriptUrl.origin,
+  ).toString();
+  const TRIGGER_SELECTOR = "[data-searchier], #searchier";
 
   const createElement = (tag, className, text) => {
     const el = document.createElement(tag);
@@ -26,8 +30,11 @@
     };
   }
 
-  async function fetchProducts(storeId, query, cursor) {
-    const params = new URLSearchParams({ storeId, first: "8" });
+  async function fetchProducts(storeId, query, cursor, limit) {
+    const params = new URLSearchParams({
+      storeId,
+      first: String(limit ?? 8),
+    });
     if (query) params.set("q", query);
     if (cursor) params.set("cursor", cursor);
     const response = await fetch(`${API_BASE}?${params.toString()}`);
@@ -35,47 +42,113 @@
     return await response.json();
   }
 
-  function ensureContainer(input) {
-    const existingId = input.getAttribute("data-searchier-results");
-    if (existingId) {
-      const existing = document.getElementById(existingId);
-      if (existing) return existing;
-    }
+  function createModal() {
+    const overlay = createElement("div", "searchier-overlay");
+    overlay.style.position = "fixed";
+    overlay.style.inset = "0";
+    overlay.style.background = "rgba(10, 11, 20, 0.65)";
+    overlay.style.backdropFilter = "blur(20px)";
+    overlay.style.display = "none";
+    overlay.style.alignItems = "center";
+    overlay.style.justifyContent = "center";
+    overlay.style.zIndex = "9999";
+    overlay.style.padding = "16px";
 
-    const wrapper = createElement("div", "searchier-wrapper");
-    wrapper.style.position = "relative";
-    wrapper.style.display = "inline-block";
-    wrapper.style.width = input.offsetWidth ? `${input.offsetWidth}px` : "320px";
-
-    input.parentNode.insertBefore(wrapper, input);
-    wrapper.appendChild(input);
-
-    const panel = createElement("div", "searchier-panel");
-    panel.style.position = "absolute";
-    panel.style.top = "calc(100% + 12px)";
-    panel.style.left = "50%";
-    panel.style.transform = "translateX(-50%)";
-    panel.style.width = "min(360px, calc(100vw - 32px))";
-    panel.style.maxHeight = "420px";
-    panel.style.background = "rgba(20, 20, 25, 0.85)";
-    panel.style.borderRadius = "24px";
-    panel.style.padding = "16px";
-    panel.style.boxShadow = "0 20px 60px rgba(0, 0, 0, 0.45)";
-    panel.style.backdropFilter = "blur(24px)";
-    panel.style.color = "#f5f5f7";
-    panel.style.fontFamily =
+    const modal = createElement("div", "searchier-modal");
+    modal.style.width = "min(480px, 100%)";
+    modal.style.maxHeight = "min(540px, 90vh)";
+    modal.style.background = "rgba(25, 26, 35, 0.9)";
+    modal.style.borderRadius = "32px";
+    modal.style.padding = "24px";
+    modal.style.boxShadow = "0 25px 80px rgba(0,0,0,0.45)";
+    modal.style.display = "flex";
+    modal.style.flexDirection = "column";
+    modal.style.gap = "20px";
+    modal.style.fontFamily =
       'system-ui, -apple-system, BlinkMacSystemFont, "Inter", sans-serif';
-    panel.style.display = "none";
-    panel.style.flexDirection = "column";
-    panel.style.gap = "12px";
-    panel.style.zIndex = "9999";
+    modal.style.color = "#f5f5f7";
 
-    wrapper.appendChild(panel);
-    return panel;
+    const header = createElement("div", "searchier-modal-header");
+    header.style.display = "flex";
+    header.style.justifyContent = "space-between";
+    header.style.alignItems = "center";
+
+    const title = createElement("h3", null, "Search Products");
+    title.style.fontSize = "1.1rem";
+    title.style.fontWeight = "600";
+    title.style.margin = "0";
+    header.appendChild(title);
+
+    const closeButton = createElement("button", "searchier-close", "✕");
+    closeButton.type = "button";
+    closeButton.style.background = "transparent";
+    closeButton.style.border = "none";
+    closeButton.style.color = "#f5f5f7";
+    closeButton.style.fontSize = "1.2rem";
+    closeButton.style.cursor = "pointer";
+    closeButton.style.opacity = "0.6";
+    closeButton.style.transition = "opacity 0.2s ease";
+    closeButton.addEventListener("mouseenter", () => {
+      closeButton.style.opacity = "1";
+    });
+    closeButton.addEventListener("mouseleave", () => {
+      closeButton.style.opacity = "0.6";
+    });
+    header.appendChild(closeButton);
+
+    const inputWrapper = createElement("div", "searchier-input-wrapper");
+    inputWrapper.style.position = "relative";
+
+    const input = createElement("input");
+    input.type = "search";
+    input.placeholder = "Search for products...";
+    input.style.width = "100%";
+    input.style.border = "1px solid rgba(255,255,255,0.25)";
+    input.style.borderRadius = "18px";
+    input.style.background = "rgba(255,255,255,0.14)";
+    input.style.padding = "12px 16px";
+    input.style.fontSize = "1rem";
+    input.style.color = "#fff";
+    input.style.outline = "none";
+    input.style.boxShadow = "inset 0 2px 6px rgba(0,0,0,0.25)";
+
+    inputWrapper.appendChild(input);
+
+    const resultsContainer = createElement("div", "searchier-results");
+    resultsContainer.style.flex = "1";
+    resultsContainer.style.overflowY = "auto";
+    resultsContainer.style.display = "none";
+    resultsContainer.style.gap = "12px";
+    resultsContainer.style.flexDirection = "column";
+
+    modal.appendChild(header);
+    modal.appendChild(inputWrapper);
+    modal.appendChild(resultsContainer);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    return { overlay, modal, input, resultsContainer, closeButton };
   }
 
-  function attachSearchBehavior(input) {
-    const container = ensureContainer(input);
+  const modalUI = createModal();
+
+  async function sendEvent(body) {
+    try {
+      await fetch(EVENTS_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ storeId: STORE_ID, ...body }),
+      });
+    } catch (error) {
+      console.warn("Searchier: analytics event failed", error);
+    }
+  }
+
+  function attachSearchBehavior() {
+    const container = modalUI.resultsContainer;
+    const input = modalUI.input;
 
     const state = {
       query: "",
@@ -89,39 +162,32 @@
 
     const hidePanel = () => {
       state.active = false;
+      modalUI.overlay.style.display = "none";
       container.style.display = "none";
     };
 
     const showPanel = () => {
       state.active = true;
-      container.style.display = "flex";
+      modalUI.overlay.style.display = "flex";
+      if (state.edges.length > 0 || state.loading) {
+        container.style.display = "flex";
+      }
+      input.focus();
     };
 
     const render = () => {
       container.innerHTML = "";
-
-      const header = createElement("div", "searchier-header");
-      header.style.display = "flex";
-      header.style.justifyContent = "space-between";
-      header.style.alignItems = "center";
-      header.style.fontSize = "0.75rem";
-      header.style.textTransform = "uppercase";
-      header.style.letterSpacing = "0.08em";
-      header.style.opacity = "0.7";
-      header.textContent = "Products";
-      container.appendChild(header);
-
-      const list = createElement("div", "searchier-list");
-      list.style.display = "flex";
-      list.style.flexDirection = "column";
-      list.style.gap = "8px";
-      container.appendChild(list);
+      container.style.display = "flex";
+      container.style.flexDirection = "column";
+      container.style.gap = "12px";
 
       if (!state.loading && state.edges.length === 0) {
         const empty = createElement(
           "div",
           "searchier-empty",
-          state.query ? "No products match your search." : "Start typing to search products.",
+          state.query || state.initialized
+            ? "No products match your search."
+            : "Discover products curated for you.",
         );
         empty.style.textAlign = "center";
         empty.style.padding = "32px 0";
@@ -154,15 +220,22 @@
 
           product.addEventListener("click", (event) => {
             event.preventDefault();
-            const slug = edge.node.slug || edge.node.id.split("_").pop();
-            const target = `/products/${slug}`;
-            window.location.href = target;
+            const slug =
+              edge.node.slug || edge.node.id.split("_").pop();
+            sendEvent({
+              type: "click",
+              query: state.query,
+              productId: edge.node.id,
+              productName: edge.node.name,
+              productSlug: slug,
+            });
+            window.location.href = `/products/${slug}`;
           });
 
           const thumb = createElement("div", "searchier-thumb");
-          thumb.style.width = "48px";
-          thumb.style.height = "48px";
-          thumb.style.borderRadius = "12px";
+          thumb.style.width = "64px";
+          thumb.style.height = "64px";
+          thumb.style.borderRadius = "16px";
           thumb.style.background = "rgba(255,255,255,0.08)";
           thumb.style.display = "flex";
           thumb.style.alignItems = "center";
@@ -187,25 +260,21 @@
           info.style.display = "flex";
           info.style.flexDirection = "column";
           info.style.gap = "4px";
+          info.style.flex = "1";
+          info.style.minWidth = "0";
 
           const title = createElement("div", "searchier-title", edge.node.name);
           title.style.fontSize = "0.95rem";
           title.style.fontWeight = "600";
-
-          const meta = createElement(
-            "div",
-            "searchier-meta",
-            `ID: ${edge.node.id}`,
-          );
-          meta.style.fontSize = "0.75rem";
-          meta.style.opacity = "0.65";
+          title.style.whiteSpace = "nowrap";
+          title.style.overflow = "hidden";
+          title.style.textOverflow = "ellipsis";
 
           info.appendChild(title);
-          info.appendChild(meta);
 
           product.appendChild(thumb);
           product.appendChild(info);
-          list.appendChild(product);
+          container.appendChild(product);
         });
       }
 
@@ -236,7 +305,7 @@
       }
     };
 
-    const loadProducts = async (reset) => {
+    const loadProducts = async (reset, limitOverride) => {
       if (state.loading) return;
       state.loading = true;
       render();
@@ -245,6 +314,7 @@
           STORE_ID,
           state.query,
           reset ? undefined : state.cursor,
+          limitOverride ?? (state.query ? 8 : 4),
         );
         if (reset) {
           state.edges = data.edges ?? [];
@@ -254,6 +324,14 @@
         state.nextCursor = data.pageInfo?.endCursor ?? undefined;
         state.cursor = state.nextCursor;
         state.hasNext = Boolean(data.pageInfo?.hasNextPage);
+        state.initialized = true;
+        if (reset) {
+          sendEvent({
+            type: "search",
+            query: state.query,
+            resultsCount: state.edges.length,
+          });
+        }
       } catch (error) {
         console.error("Searchier: failed to load products", error);
       } finally {
@@ -270,45 +348,59 @@
         loadProducts(true);
       } else {
         state.edges = [];
-        render();
+        if (state.initialized) {
+          loadProducts(true, 4);
+        } else {
+          container.style.display = "none";
+        }
       }
-    }, 250);
+    }, 500);
 
     input.addEventListener("input", onInput);
-    input.addEventListener("focus", () => {
-      if (state.query) {
-        showPanel();
+
+    modalUI.closeButton.addEventListener("click", hidePanel);
+    modalUI.overlay.addEventListener("click", (event) => {
+      if (event.target === modalUI.overlay) {
+        hidePanel();
       }
     });
-    input.addEventListener("blur", () => {
-      setTimeout(() => {
-        if (!container.contains(document.activeElement)) {
-          hidePanel();
-        }
-      }, 150);
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && state.active) {
+        hidePanel();
+      }
     });
 
-    // Initial styling to match floating Apple-like input
-    input.style.border = "1px solid rgba(255,255,255,0.2)";
-    input.style.borderRadius = "18px";
-    input.style.padding = "10px 18px";
-    input.style.background = "rgba(255,255,255,0.15)";
-    input.style.color = "#fff";
-    input.style.backdropFilter = "blur(20px)";
-    input.style.boxShadow = "0 10px 40px rgba(0,0,0,0.25)";
-    input.style.fontSize = "1rem";
-    input.style.width = "100%";
+    return {
+      open: () => {
+        showPanel();
+        if (!state.initialized) {
+          loadProducts(true, 4);
+        } else if (state.query) {
+          loadProducts(true);
+        } else if (state.edges.length === 0) {
+          loadProducts(true, 4);
+        } else {
+          render();
+        }
+      },
+    };
   }
+
+  const modalController = attachSearchBehavior();
 
   function init() {
     const processed = new WeakSet();
 
     const scan = () => {
-      const inputs = document.querySelectorAll(INPUT_SELECTOR);
-      inputs.forEach((input) => {
-        if (!processed.has(input)) {
-          processed.add(input);
-          attachSearchBehavior(input);
+      const triggers = document.querySelectorAll(TRIGGER_SELECTOR);
+      triggers.forEach((trigger) => {
+        if (!processed.has(trigger)) {
+          processed.add(trigger);
+          trigger.addEventListener("click", (event) => {
+            event.preventDefault();
+            modalController.open();
+          });
         }
       });
     };

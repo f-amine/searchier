@@ -5,6 +5,7 @@ import {
   boolean,
   uuid,
   uniqueIndex,
+  integer,
 } from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
@@ -98,3 +99,20 @@ export const storeConfig = pgTable(
     ),
   }),
 );
+
+export const searchEvent = pgTable("search_event", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  storeId: text("store_id").notNull(),
+  type: text("type").notNull(),
+  query: text("query"),
+  resultsCount: integer("results_count"),
+  productId: text("product_id"),
+  productName: text("product_name"),
+  productSlug: text("product_slug"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
